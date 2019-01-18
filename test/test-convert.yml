@@ -1,0 +1,17 @@
+name: TomcatCustom
+version: 1.0
+enabled: true
+jmx:
+  - object_name: Catalina:type=Cache,host=localhost,path=/examples
+    root_metric_name: Tomcat/{host}
+    metrics:
+      - attributes: accessCount, cacheSize, hitsCount
+        type: simple
+  - object_name: Catalina:type=Connector,port=8009
+    root_metric_name: TomcatConnector
+    metrics:
+      - attributes: bufferSize, maxHeaderCount
+  - object_name: java.nio:type=BufferPool,name=*
+    metrics:
+      - attributes: Count
+        type: monotonically_increasing

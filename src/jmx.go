@@ -13,6 +13,7 @@ import (
 
 type argumentList struct {
 	sdkArgs.DefaultArgumentList
+	ConvertFile     string `default:"false" help:"Set to true if you want to convert a JMX config file from the New Relic Java Agent"`
 	JmxHost         string `default:"localhost" help:"The host running JMX"`
 	JmxPort         string `default:"9999" help:"The port JMX is running on"`
 	JmxUser         string `default:"admin" help:"The username for the JMX connection"`
@@ -36,7 +37,6 @@ var (
 )
 
 func main() {
-
 	// Create a new integration
 	jmxIntegration, err := integration.New(integrationName, integrationVersion, integration.Args(&args))
 	if err != nil {
@@ -44,18 +44,72 @@ func main() {
 	}
 	log.SetupLogging(args.Verbose)
 
+	// Ensure a collection file is specified
+	if args.CollectionFiles == "" {
+		log.Error("Must specify at least one collection file")
+		os.Exit(1)
+	}
+
+	if args.ConvertFile == "true" {
+		log.Info("Converting " + args.CollectionFiles + " to nri-jmx format")
+
+		// For each collection definition file, parse and collect it
+		oldJmxFiles := strings.Split(args.CollectionFiles, ",")
+		for _, oldJmxFile := range oldJmxFiles {
+
+			// Check that the filepath is an absolute path
+			if !filepath.IsAbs(oldJmxFile) {
+				log.Error("Invalid metrics collection path %s. Metrics collection files must be specified as absolute paths.", oldJmxFile)
+				os.Exit(1)
+			}
+
+			// Parse the old yaml file into a raw definition
+			oldJmxFileDefinition, err := parseJavaAgentYaml(oldJmxFile)
+			if err != nil {
+				log.Error("Failed to parse collection definition file %s: %s", oldJmxFile, err)
+				os.Exit(1)
+			}
+
+			newReduction, err := reduceJavaAgentYaml(oldJmxFileDefinition)
+			if err != nil {
+				log.Error("Failed to parse collection definition %s: %s", oldJmxFile, err)
+				os.Exit(1)
+			}
+
+			// Validate the definition and create a collection object
+			newerCollection, err := buildCollectionDefinition(newReduction)
+			if err != nil {
+				log.Error("Failed to parse collection definition %s: %s", oldJmxFile, err)
+				os.Exit(1)
+			}
+
+			// Output the new file
+			outputOHIJmxFile(oldJmxFile, newerCollection)
+
+			// Validate the definition and create a collection object
+			newCollection, err := parseJavaAgentJmxDefinition(oldJmxFileDefinition)
+			if err != nil {
+				log.Error("Failed to parse collection definition %s: %s", oldJmxFile, err)
+				os.Exit(1)
+			}
+
+			// Output the new file
+			outputOHIJmxFile(oldJmxFile, newCollection)
+
+			if err != nil {
+				log.Error("Failed to parse collection definition %s: %s", oldJmxFile, err)
+				os.Exit(1)
+			}
+		}
+		os.Exit(0)
+	}
+
 	// Open a JMX connection
 	if err := jmxOpenFunc(args.JmxHost, args.JmxPort, args.JmxUser, args.JmxPass); err != nil {
 		log.Error(
 			"Failed to open JMX connection (host: %s, port: %s, user: %s, pass: %s): %s",
 			args.JmxHost, args.JmxPort, args.JmxUser, args.JmxPass, err,
 		)
-		os.Exit(1)
-	}
-
-	// Ensure a collection file is specified
-	if args.CollectionFiles == "" {
-		log.Error("Must specify at least one collection file")
 		os.Exit(1)
 	}
 
