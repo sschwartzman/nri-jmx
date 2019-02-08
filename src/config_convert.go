@@ -98,7 +98,7 @@ func parseJavaAgentJmxDefinition(m *mainDefinitionParser) ([]*domainOutput, erro
 			var outAttrs []*attributeOutput
 			for _, thisAttr := range inAttrs {
 				thisAttr = strings.TrimSpace(thisAttr)
-				outAttrs = append(outAttrs, &attributeOutput{Attr: thisAttr, MetricType: convertMetricType(thisMetric.Type), MetricName:  getMetricName(thisAttr, jmxObject.RootMetricName, domainAndQuery[1])})
+				outAttrs = append(outAttrs, &attributeOutput{Attr: thisAttr, MetricType: convertMetricType(thisMetric.Type), MetricName: getMetricName(thisAttr, jmxObject.RootMetricName, domainAndQuery[1])})
 			}
 			outbeans = append(outbeans, &beanOutput{Query: domainAndQuery[1], Attributes: outAttrs})
 		}
