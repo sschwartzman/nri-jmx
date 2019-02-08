@@ -11,10 +11,10 @@ import (
 )
 
 var defaultEventType = "JMXSample"
-var sep = "_"
+var spaceSep = "_"
+var metricSep = ":"
 
 // 'Parser' structs for parsing Java Agent YAML format for JMX counters
-
 type mainDefinitionParser struct {
 	Name    string                `yaml:"name"`
 	Version float32               `yaml:"version"`
@@ -98,12 +98,11 @@ func parseJavaAgentJmxDefinition(m *mainDefinitionParser) ([]*domainOutput, erro
 			var outAttrs []*attributeOutput
 			for _, thisAttr := range inAttrs {
 				thisAttr = strings.TrimSpace(thisAttr)
-				outAttrs = append(outAttrs, &attributeOutput{Attr: thisAttr, MetricType: convertMetricType(thisMetric.Type), MetricName: thisAttr})
+				outAttrs = append(outAttrs, &attributeOutput{Attr: thisAttr, MetricType: convertMetricType(thisMetric.Type), MetricName:  getMetricName(thisAttr, jmxObject.RootMetricName, domainAndQuery[1])})
 			}
 			outbeans = append(outbeans, &beanOutput{Query: domainAndQuery[1], Attributes: outAttrs})
 		}
-		var outEventType = getEventName(m.Name, jmxObject.RootMetricName, domainAndQuery[1])
-		domains = append(domains, &domainOutput{Domain: domainAndQuery[0], EventType: outEventType, Beans: outbeans})
+		domains = append(domains, &domainOutput{Domain: domainAndQuery[0], EventType: getEventType(m.Name, domainAndQuery[0]), Beans: outbeans})
 	}
 	return domains, nil
 }
@@ -127,14 +126,14 @@ func reduceJavaAgentYaml(m *mainDefinitionParser) (map[string]*domainReducer, er
 				thisAttr = strings.TrimSpace(thisAttr)
 				if thisBean != nil {
 					if _, ok := thisBean.AttributesMap[thisAttr]; !ok {
-						thisBean.AttributesMap[thisAttr] = &attributeReducer{MetricType: convertMetricType(thisMetric.Type), MetricName: thisAttr}
+						thisBean.AttributesMap[thisAttr] = &attributeReducer{MetricType: convertMetricType(thisMetric.Type), MetricName: getMetricName(thisAttr, jmxObject.RootMetricName, domainAndQuery[1])}
 					}
 				} else {
 					thisAttrMap := make(map[string]*attributeReducer)
-					thisAttrMap[thisAttr] = &attributeReducer{MetricType: convertMetricType(thisMetric.Type), MetricName: thisAttr}
+					thisAttrMap[thisAttr] = &attributeReducer{MetricType: convertMetricType(thisMetric.Type), MetricName: getMetricName(thisAttr, jmxObject.RootMetricName, domainAndQuery[1])}
 					thisBean = &beanReducer{AttributesMap: thisAttrMap}
 					if thisDomain == nil {
-						var outEventType = getEventName(m.Name, jmxObject.RootMetricName, domainAndQuery[1])
+						var outEventType = getEventType(m.Name, domainAndQuery[0])
 						thisBeanMap := make(map[string]*beanReducer)
 						thisBeanMap[domainAndQuery[1]] = thisBean
 						thisDomainMap[domainAndQuery[0]] = &domainReducer{EventType: outEventType, BeansMap: thisBeanMap}
@@ -181,18 +180,23 @@ func convertMetricType(metrictype string) string {
 		return "gauge"
 	case "monotonically_increasing":
 		return "delta"
+	case "attribute":
+		return "attribute"
 	default:
 		return "gauge"
 	}
 }
 
-func getEventName(oldName string, rootMetricName string, query string) string {
+func getEventType(oldName string, domainName string) string {
 	if oldName == "" {
-		oldName = defaultEventType
+		return makeInsightsCompliant(defaultEventType + metricSep + domainName)
 	}
+	return makeInsightsCompliant(oldName + metricSep + domainName)
+}
 
+func getMetricName(attrName string, rootMetricName string, query string) string {
 	if rootMetricName == "" {
-		return makeInsightsCompliantEventType(oldName)
+		return attrName
 	}
 
 	objNameRegex, _ := regexp.Compile("{\\w+}")
@@ -211,11 +215,11 @@ func getEventName(oldName string, rootMetricName string, query string) string {
 			}
 		}
 	}
-	return makeInsightsCompliantEventType(oldName + sep + rootMetricName)
+	return makeInsightsCompliant(rootMetricName + metricSep + attrName)
 }
 
-func makeInsightsCompliantEventType(inString string) string {
-	inString = strings.Replace(inString, " ", "_", -1)
-	inString = strings.Replace(inString, "/", ":", -1)
+func makeInsightsCompliant(inString string) string {
+	inString = strings.Replace(inString, " ", spaceSep, -1)
+	inString = strings.Replace(inString, "/", metricSep, -1)
 	return inString
 }
